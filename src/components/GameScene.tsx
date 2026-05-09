@@ -169,7 +169,8 @@ function Orbs() {
 export function GameScene() {
   const { gameState, playerId, sendPlayerState, sendCollectOrb } = useGameStore();
   const { camera } = useThree();
-  const inputs = useRef({ left: false, right: false, boost: false });
+  const inputs = useRef({ left: false, right: false, boost: false, useMouse: false });
+  const mousePos = useRef({ x: 0, y: 0 });
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const [lightTarget] = useState(() => new THREE.Object3D());
 
@@ -191,8 +192,8 @@ export function GameScene() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') && !inputs.current.left) { inputs.current.left = true; }
-      if ((e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') && !inputs.current.right) { inputs.current.right = true; }
+      if ((e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') && !inputs.current.left) { inputs.current.left = true; inputs.current.useMouse = false; }
+      if ((e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') && !inputs.current.right) { inputs.current.right = true; inputs.current.useMouse = false; }
       if ((e.key === ' ' || e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') && !inputs.current.boost) { inputs.current.boost = true; }
     };
 
@@ -202,17 +203,37 @@ export function GameScene() {
       if ((e.key === ' ' || e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') && inputs.current.boost) { inputs.current.boost = false; }
     };
 
+    const handlePointerMove = (e: PointerEvent) => {
+      inputs.current.useMouse = true;
+      // Mouse is in normalized coordinates from useThree, but we can also just listen to move
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
+      inputs.current.boost = true;
+      inputs.current.useMouse = true;
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      inputs.current.boost = false;
+    };
+
     const handleBlur = () => {
-      inputs.current = { left: false, right: false, boost: false };
+      inputs.current = { left: false, right: false, boost: false, useMouse: false };
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('blur', handleBlur);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('blur', handleBlur);
     };
   }, []);
@@ -235,8 +256,27 @@ export function GameScene() {
       if (!localPlayerRef.current.active) return;
 
       // Local movement logic
-      if (inputs.current.left) localPlayerRef.current.currentAngle += TURN_SPEED * delta;
-      if (inputs.current.right) localPlayerRef.current.currentAngle -= TURN_SPEED * delta;
+      if (inputs.current.useMouse) {
+        // Turn towards mouse cursor
+        // mouse coordinates are [-1, 1], where 0,0 is center
+        const targetAngle = Math.atan2(state.mouse.y, state.mouse.x);
+        
+        // Normalize angles to be between -PI and PI
+        let angleDiff = targetAngle - localPlayerRef.current.currentAngle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+        // Apply turning speed
+        const step = TURN_SPEED * 1.5 * delta; // Slightly faster turn with mouse for responsiveness
+        if (Math.abs(angleDiff) < step) {
+          localPlayerRef.current.currentAngle = targetAngle;
+        } else {
+          localPlayerRef.current.currentAngle += Math.sign(angleDiff) * step;
+        }
+      } else {
+        if (inputs.current.left) localPlayerRef.current.currentAngle += TURN_SPEED * delta;
+        if (inputs.current.right) localPlayerRef.current.currentAngle -= TURN_SPEED * delta;
+      }
       
       localPlayerRef.current.isBoosting = inputs.current.boost && localPlayerRef.current.score > 10;
       const speed = localPlayerRef.current.isBoosting ? BOOST_SPEED : BASE_SPEED;
