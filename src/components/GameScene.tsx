@@ -9,6 +9,7 @@ import { useGameStore, globalGameState } from '../store/gameStore';
 import { WORLD_SIZE, TURN_SPEED, BOOST_SPEED, BASE_SPEED } from '../shared/types';
 import * as THREE from 'three';
 import { Sphere, Grid } from '@react-three/drei';
+import { audioManager } from '../lib/audioManager';
 
 const localCollectedOrbs = new Set<string>();
 
@@ -277,6 +278,7 @@ export function GameScene() {
           localCollectedOrbs.add(orbId);
           delete gs.orbs[orbId]; // predict locally
           sendCollectOrb(orbId);
+          audioManager.playCollectSound(orb.value);
         }
       }
 
@@ -306,6 +308,7 @@ export function GameScene() {
 
       if (collided) {
         localPlayerRef.current.active = false;
+        audioManager.playDeathSound();
         sendPlayerState({
           segments: localPlayerRef.current.segments,
           score: localPlayerRef.current.score,
